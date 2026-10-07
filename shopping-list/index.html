@@ -110,7 +110,7 @@ button{border:0;border-radius:10px;padding:11px 14px;cursor:pointer}
 </div>
 
 <script>
-const STATE_URL="__STATE_URL__";
+const STATE_URL="https://api.jsonstorage.net/v1/json/cvsa91-shopping-20261007-8e4f7b31/lista-compra";
 const SECTIONS=["Fruta y verdura","Carnicería y pescadería","Lácteos y huevos","Panadería","Despensa","Congelados","Bebidas","Limpieza","Higiene y cuidado personal","Otros"];
 let state={version:1,items:[],updatedAt:null};
 let filter="pending";
@@ -136,8 +136,17 @@ function fillSelect(sel){
 fillSelect($("#section")); fillSelect($("#editSection"));
 
 async function fetchState(silent=false){
-  if(STATE_URL.includes("__STATE_URL__")) throw new Error("Backend aún no inicializado");
-  const r=await fetch(STATE_URL+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
+  let r=await fetch(STATE_URL+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
+  if(r.status===404){
+    const initial={version:1,items:[],updatedAt:now()};
+    const cr=await fetch(STATE_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify(initial)
+    });
+    if(!cr.ok && cr.status!==409) throw new Error("No se pudo inicializar la lista ("+cr.status+")");
+    r=await fetch(STATE_URL+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
+  }
   if(!r.ok) throw new Error("No se pudo leer la lista ("+r.status+")");
   const data=await r.json();
   data.items=Array.isArray(data.items)?data.items:[];
