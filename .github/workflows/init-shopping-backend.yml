@@ -1,0 +1,59 @@
+name: Initialize shopping list backend
+
+on:
+  push:
+    branches:
+      - shopping-list-app
+    paths:
+      - ".github/workflows/init-shopping-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Create shared JSON storage and inject URL
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RESPONSE="$(curl -fsS -X POST 'https://api.jsonstorage.net/v1/json' \
+            -H 'Content-Type: application/json' \
+            --data '{"version":1,"items":[],"updatedAt":null}')"
+
+          echo "JsonStorage response: $RESPONSE"
+          URI="$(printf '%s' "$RESPONSE" | jq -r '.uri // empty')"
+
+          if [ -z "$URI" ]; then
+            echo "JsonStorage did not return a URI"
+            exit 1
+          fi
+
+          python3 - "$URI" <<'PY'
+import sys
+from pathlib import Path
+
+uri = sys.argv[1]
+path = Path("shopping-list/index.html")
+text = path.read_text(encoding="utf-8")
+old = 'https://api.jsonstorage.net/v1/json/cvsa91-shopping-20261007-8e4f7b31/lista-compra'
+if old not in text:
+    raise SystemExit("Expected placeholder backend URL not found")
+path.write_text(text.replace(old, uri), encoding="utf-8")
+print("Injected:", uri)
+PY
+
+      - name: Commit corrected backend URL
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shopping-list/index.html
+          git commit -m "Fix shared shopping list backend URL"
+          git push origin HEAD:shopping-list-app
