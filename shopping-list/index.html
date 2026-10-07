@@ -68,7 +68,7 @@ button{border:0;border-radius:10px;padding:11px 14px;cursor:pointer}
   <header>
     <div>
       <h1>🛒 Lista de la compra</h1>
-      <div class="sub">Compartida · se sincroniza automáticamente</div>
+      <div class="sub">Compartida · se sincroniza automáticamente · comparte esta misma URL</div>
     </div>
     <div id="sync" class="sync">Conectando…</div>
   </header>
@@ -110,7 +110,8 @@ button{border:0;border-radius:10px;padding:11px 14px;cursor:pointer}
 </div>
 
 <script>
-const STATE_URL="https://api.jsonstorage.net/v1/json/cvsa91-shopping-20261007-8e4f7b31/lista-compra";
+const API_BASE="https://superjsonblob.com/api/jsonBlob";
+let STATE_URL=null;
 const SECTIONS=["Fruta y verdura","Carnicería y pescadería","Lácteos y huevos","Panadería","Despensa","Congelados","Bebidas","Limpieza","Higiene y cuidado personal","Otros"];
 let state={version:1,items:[],updatedAt:null};
 let filter="pending";
@@ -135,18 +136,34 @@ function fillSelect(sel){
 }
 fillSelect($("#section")); fillSelect($("#editSection"));
 
-async function fetchState(silent=false){
-  let r=await fetch(STATE_URL+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
-  if(r.status===404){
+async function ensureBackend(){
+  if(STATE_URL) return STATE_URL;
+
+  const params=new URLSearchParams(location.hash.replace(/^#/,""));
+  let id=params.get("list");
+
+  if(!id){
+    setSync("Creando lista…");
     const initial={version:1,items:[],updatedAt:now()};
-    const cr=await fetch(STATE_URL,{
+    const cr=await fetch(API_BASE,{
       method:"POST",
       headers:{"Content-Type":"application/json","Accept":"application/json"},
       body:JSON.stringify(initial)
     });
-    if(!cr.ok && cr.status!==409) throw new Error("No se pudo inicializar la lista ("+cr.status+")");
-    r=await fetch(STATE_URL+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
+    if(!cr.ok) throw new Error("No se pudo crear la lista ("+cr.status+")");
+    const created=await cr.json();
+    id=created.id;
+    if(!id) throw new Error("El servidor no devolvió identificador");
+    history.replaceState(null,"",location.pathname+location.search+"#list="+encodeURIComponent(id));
   }
+
+  STATE_URL=API_BASE+"/"+encodeURIComponent(id);
+  return STATE_URL;
+}
+
+async function fetchState(silent=false){
+  const url=await ensureBackend();
+  const r=await fetch(url+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
   if(!r.ok) throw new Error("No se pudo leer la lista ("+r.status+")");
   const data=await r.json();
   data.items=Array.isArray(data.items)?data.items:[];
@@ -154,7 +171,8 @@ async function fetchState(silent=false){
   return data;
 }
 async function putState(next){
-  const r=await fetch(STATE_URL,{
+  const url=await ensureBackend();
+  const r=await fetch(url,{
     method:"PUT",
     headers:{"Content-Type":"application/json","Accept":"application/json"},
     body:JSON.stringify(next)
