@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lista de la compra</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--text:#191b1f;--muted:#6d737c;--line:#e4e7eb;--accent:#1f7a4d;--accent2:#e8f4ed;--danger:#b42318;--shadow:0 5px 20px rgba(15,23,42,.06)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:18px 14px 90px}
+header{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+h1{font-size:28px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:14px}
+.sync{font-size:12px;padding:7px 10px;border-radius:999px;background:#eef1f4;color:#49515a;white-space:nowrap}
+.sync.ok{background:var(--accent2);color:var(--accent)}
+.sync.err{background:#fdecea;color:var(--danger)}
+.panel,.section{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.panel{padding:14px;margin-bottom:14px}
+.formgrid{display:grid;grid-template-columns:minmax(0,2fr) minmax(120px,1fr) minmax(110px,.7fr) minmax(130px,1fr) auto;gap:9px}
+input,select,button{font:inherit}
+input,select{width:100%;padding:11px 12px;border:1px solid #d7dbe0;border-radius:10px;background:#fff;color:var(--text)}
+button{border:0;border-radius:10px;padding:11px 14px;cursor:pointer}
+.primary{background:var(--accent);color:#fff;font-weight:650}
+.secondary{background:#eef1f4;color:#333}
+.danger{background:#fff0ef;color:var(--danger)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px;align-items:center}
+.pill{padding:8px 11px;border-radius:999px;background:#eef1f4;color:#4b5158;font-size:13px}
+.pill.active{background:var(--accent2);color:var(--accent);font-weight:650}
+.count{margin-left:auto;color:var(--muted);font-size:13px}
+.sections{display:grid;gap:12px}
+.section{overflow:hidden}
+.section h2{font-size:16px;margin:0;padding:12px 14px;border-bottom:1px solid var(--line);background:#fafbfc}
+.row{display:grid;grid-template-columns:42px minmax(0,2fr) 110px 150px 90px;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row.done .name{text-decoration:line-through;color:#8a9098}
+.row.done{background:#fafafa}
+.check{display:grid;place-items:center}
+.check input{width:22px;height:22px;accent-color:var(--accent)}
+.name{font-weight:600;word-break:break-word}
+.qty,.owner{font-size:14px;color:#4c5259}
+.actions{display:flex;gap:6px;justify-content:flex-end}
+.icon{padding:7px 8px;background:#f1f3f5}
+.empty{padding:18px;color:var(--muted);text-align:center}
+.modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;align-items:flex-end;justify-content:center;padding:14px;z-index:20}
+.modal.show{display:flex}
+.dialog{width:min(560px,100%);background:white;border-radius:18px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.dialog h3{margin:0 0 12px}
+.dialoggrid{display:grid;gap:9px}
+.dialogactions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+@media(max-width:720px){
+ .wrap{padding:14px 10px 80px}
+ h1{font-size:24px}
+ .formgrid{grid-template-columns:1fr 1fr}
+ .formgrid .wide{grid-column:1/-1}
+ .formgrid .primary{grid-column:1/-1}
+ .row{grid-template-columns:38px 1fr auto;padding:11px 10px}
+ .row .qty,.row .owner{grid-column:2;display:inline}
+ .row .meta{grid-column:2;display:flex;gap:8px;flex-wrap:wrap;margin-top:-3px}
+ .row .actions{grid-column:3;grid-row:1/3;flex-direction:column}
+ .count{width:100%;margin-left:0}
+ header{align-items:center}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>🛒 Lista de la compra</h1>
+      <div class="sub">Compartida · se sincroniza automáticamente · comparte esta misma URL</div>
+    </div>
+    <div id="sync" class="sync">Conectando…</div>
+  </header>
+
+  <section class="panel">
+    <form id="addForm" class="formgrid">
+      <input id="product" class="wide" placeholder="Producto" autocomplete="off" required>
+      <select id="section"></select>
+      <input id="qty" placeholder="Cantidad" autocomplete="off">
+      <input id="owner" list="owners" placeholder="Responsable" autocomplete="off">
+      <button class="primary" type="submit">Añadir</button>
+      <datalist id="owners"></datalist>
+    </form>
+    <div class="toolbar">
+      <button class="pill active" type="button" data-filter="pending">Pendientes</button>
+      <button class="pill" type="button" data-filter="all">Todos</button>
+      <button class="pill" type="button" data-filter="done">Comprados</button>
+      <span id="count" class="count"></span>
+    </div>
+  </section>
+
+  <main id="sections" class="sections"></main>
+</div>
+
+<div id="modal" class="modal">
+  <div class="dialog">
+    <h3>Editar producto</h3>
+    <div class="dialoggrid">
+      <input id="editProduct" placeholder="Producto">
+      <select id="editSection"></select>
+      <input id="editQty" placeholder="Cantidad">
+      <input id="editOwner" list="owners" placeholder="Responsable">
+    </div>
+    <div class="dialogactions">
+      <button id="cancelEdit" class="secondary" type="button">Cancelar</button>
+      <button id="saveEdit" class="primary" type="button">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE="https://jsonblob.com/api/jsonBlob";
+let STATE_URL=null;
+const SECTIONS=["Fruta y verdura","Carnicería y pescadería","Lácteos y huevos","Panadería","Despensa","Congelados","Bebidas","Limpieza","Higiene y cuidado personal","Otros"];
+let state={version:1,items:[],updatedAt:null};
+let filter="pending";
+let editingId=null;
+let busy=false;
+let lastRemoteStamp=null;
+
+const $=s=>document.querySelector(s);
+const syncEl=$("#sync");
+
+function uid(){
+  return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
+}
+function now(){return new Date().toISOString();}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));}
+function setSync(text,kind=""){
+  syncEl.textContent=text;
+  syncEl.className="sync"+(kind?" "+kind:"");
+}
+function fillSelect(sel){
+  sel.innerHTML=SECTIONS.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join("");
+}
+fillSelect($("#section")); fillSelect($("#editSection"));
+
+async function ensureBackend(){
+  if(STATE_URL) return STATE_URL;
+
+  const params=new URLSearchParams(location.hash.replace(/^#/,""));
+  let id=params.get("list");
+
+  if(!id){
+    setSync("Creando lista…");
+    const initial={version:1,items:[],updatedAt:now()};
+    const cr=await fetch(API_BASE,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify(initial)
+    });
+    if(!cr.ok) throw new Error("No se pudo crear la lista ("+cr.status+")");
+
+    const locationHeader=cr.headers.get("Location") || "";
+    const xJsonBlob=cr.headers.get("X-jsonblob") || cr.headers.get("x-jsonblob") || "";
+    id=xJsonBlob || locationHeader.split("/").filter(Boolean).pop();
+
+    if(!id) throw new Error("El servidor no devolvió identificador");
+
+    history.replaceState(
+      null,
+      "",
+      location.pathname+location.search+"#list="+encodeURIComponent(id)
+    );
+  }
+
+  STATE_URL=API_BASE+"/"+encodeURIComponent(id);
+  return STATE_URL;
+}
+
+async function fetchState(silent=false){
+  const url=await ensureBackend();
+  const r=await fetch(url+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
+  if(!r.ok) throw new Error("No se pudo leer la lista ("+r.status+")");
+  const data=await r.json();
+  data.items=Array.isArray(data.items)?data.items:[];
+  if(!silent) setSync("Sincronizado","ok");
+  return data;
+}
+async function putState(next){
+  const url=await ensureBackend();
+  const r=await fetch(url,{
+    method:"PUT",
+    headers:{"Content-Type":"application/json","Accept":"application/json"},
+    body:JSON.stringify(next)
+  });
+  if(!r.ok) throw new Error("No se pudo guardar ("+r.status+")");
+}
+
+async function mutate(fn){
+  if(busy) return;
+  busy=true; setSync("Guardando…");
+  try{
+    const latest=await fetchState(true);
+    const next=JSON.parse(JSON.stringify(latest));
+    fn(next);
+    next.version=1;
+    next.updatedAt=now();
+    await putState(next);
+    state=next;
+    lastRemoteStamp=next.updatedAt;
+    render();
+    setSync("Guardado","ok");
+  }catch(e){
+    console.error(e); setSync("Error de sincronización","err");
+    alert("No se pudo guardar el cambio. Comprueba la conexión y vuelve a intentarlo.");
+  }finally{busy=false;}
+}
+
+async function refresh(){
+  if(busy) return;
+  try{
+    const remote=await fetchState(true);
+    if(remote.updatedAt!==lastRemoteStamp){
+      state=remote; lastRemoteStamp=remote.updatedAt; render();
+    }
+    setSync("Sincronizado","ok");
+  }catch(e){
+    console.error(e); setSync("Sin conexión","err");
+  }
+}
+
+function visibleItems(){
+  return state.items.filter(i=>filter==="all" || (filter==="done"?i.done:!i.done));
+}
+function render(){
+  const root=$("#sections");
+  const vis=visibleItems();
+  const pending=state.items.filter(i=>!i.done).length;
+  $("#count").textContent=pending+" pendiente"+(pending===1?"":"s")+" · "+state.items.length+" total";
+  const owners=[...new Set(state.items.map(i=>(i.owner||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  $("#owners").innerHTML=owners.map(o=>'<option value="'+esc(o)+'"></option>').join("");
+
+  let html="";
+  for(const sec of SECTIONS){
+    const arr=vis.filter(i=>(i.section||"Otros")===sec);
+    if(!arr.length) continue;
+    html+='<section class="section"><h2>'+esc(sec)+' · '+arr.length+'</h2>';
+    for(const i of arr){
+      html+='<div class="row '+(i.done?"done":"")+'" data-id="'+esc(i.id)+'">'+
+        '<div class="check"><input class="toggle" type="checkbox" '+(i.done?"checked":"")+' aria-label="Marcar '+esc(i.name)+'"></div>'+
+        '<div><div class="name">'+esc(i.name)+'</div><div class="meta"><span class="qty">'+(i.qty?'Cantidad: '+esc(i.qty):"")+'</span><span class="owner">'+(i.owner?'Responsable: '+esc(i.owner):"")+'</span></div></div>'+
+        '<div class="qty">'+(i.qty?esc(i.qty):"—")+'</div>'+
+        '<div class="owner">'+(i.owner?esc(i.owner):"—")+'</div>'+
+        '<div class="actions"><button class="icon edit" type="button" title="Editar">✏️</button><button class="icon remove" type="button" title="Eliminar">🗑️</button></div>'+
+      '</div>';
+    }
+    html+='</section>';
+  }
+  root.innerHTML=html || '<div class="panel empty">No hay productos en esta vista.</div>';
+}
+
+$("#addForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const name=$("#product").value.trim();
+  if(!name) return;
+  const item={id:uid(),name,section:$("#section").value,qty:$("#qty").value.trim(),owner:$("#owner").value.trim(),done:false,createdAt:now()};
+  await mutate(s=>s.items.push(item));
+  $("#product").value=""; $("#qty").value=""; $("#product").focus();
+});
+
+document.addEventListener("click",async e=>{
+  const row=e.target.closest(".row");
+  if(e.target.matches("[data-filter]")){
+    filter=e.target.dataset.filter;
+    document.querySelectorAll("[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===filter));
+    render(); return;
+  }
+  if(!row) return;
+  const id=row.dataset.id;
+  if(e.target.closest(".remove")){
+    if(confirm("¿Eliminar este producto?")) await mutate(s=>{s.items=s.items.filter(i=>i.id!==id);});
+  }
+  if(e.target.closest(".edit")) openEdit(id);
+});
+
+document.addEventListener("change",async e=>{
+  const row=e.target.closest(".row");
+  if(!row || !e.target.classList.contains("toggle")) return;
+  const id=row.dataset.id, checked=e.target.checked;
+  await mutate(s=>{const i=s.items.find(x=>x.id===id); if(i){i.done=checked;i.doneAt=checked?now():null;}});
+});
+
+function openEdit(id){
+  const i=state.items.find(x=>x.id===id); if(!i)return;
+  editingId=id;
+  $("#editProduct").value=i.name||"";
+  $("#editSection").value=i.section||"Otros";
+  $("#editQty").value=i.qty||"";
+  $("#editOwner").value=i.owner||"";
+  $("#modal").classList.add("show");
+  $("#editProduct").focus();
+}
+function closeEdit(){editingId=null;$("#modal").classList.remove("show");}
+$("#cancelEdit").addEventListener("click",closeEdit);
+$("#modal").addEventListener("click",e=>{if(e.target.id==="modal")closeEdit();});
+$("#saveEdit").addEventListener("click",async()=>{
+  if(!editingId)return;
+  const id=editingId;
+  const values={name:$("#editProduct").value.trim(),section:$("#editSection").value,qty:$("#editQty").value.trim(),owner:$("#editOwner").value.trim()};
+  if(!values.name)return;
+  await mutate(s=>{const i=s.items.find(x=>x.id===id);if(i)Object.assign(i,values,{updatedAt:now()});});
+  closeEdit();
+});
+
+render();
+refresh();
+setInterval(refresh,3000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
+window.addEventListener("online",refresh);
+</script>
+</body>
+</html>
